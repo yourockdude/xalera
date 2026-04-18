@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>поток x — ai operating system</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:    #EEF2FA;
+      --cream-2:  #E5ECF7;
+      --cream-3:  #D9E3F2;
+      --ink:      #181C2E;
+      --ink-2:    #3D4468;
+      --ink-3:    #7880A2;
+      --line:     #C8D2E8;
+      --white:    #F6F9FF;
+
+      /* app colours — kept exactly as in the app */
+      --app-blue:   #4F9EF8;
+      --app-yellow: #F5A623;
+      --app-red:    #FF3B30;
+      --app-green:  #34C759;
+      --app-purple: #5B47FB;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* ── CURSOR ─────────────────────────────────────── */
+    #cur {
+      position: fixed; top: 0; left: 0; z-index: 9999;
+      pointer-events: none;
+    }
+    #cur .c-dot {
+      position: absolute;
+      width: 6px; height: 6px;
+      background: var(--ink);
+      border-radius: 50%;
+      transform: translate(-50%,-50%);
+      transition: width .2s, height .2s;
+    }
+    #cur .c-ring {
+      position: absolute;
+      width: 32px; height: 32px;
+      border: 1px solid rgba(28,26,23,.35);
+      border-radius: 50%;
+      transform: translate(-50%,-50%);
+      transition: width .35s cubic-bezier(.23,1,.32,1),
+                  height .35s cubic-bezier(.23,1,.32,1),
+                  opacity .35s;
+    }
+    body.ch #cur .c-dot  { width: 10px; height: 10px; }
+    body.ch #cur .c-ring { width: 52px; height: 52px; opacity: .5; }
+
+    /* ── NAV ─────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 28px 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: background .4s, border-color .4s;
+      border-bottom: 1px solid transparent;
+    }
+    nav.scrolled {
+      background: rgba(238,242,250,.92);
+      backdrop-filter: blur(16px);
+      border-color: var(--line);
+    }
+    .nav-logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px; font-weight: 400; letter-spacing: -.01em;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .nav-logo em { font-style: italic; }
+    .nav-links { display: flex; gap: 40px; list-style: none; }
+    .nav-links a {
+      font-size: 13px; font-weight: 400; letter-spacing: .02em;
+      color: var(--ink-2); text-decoration: none;
+      position: relative;
+      transition: color .2s;
+    }
+    .nav-links a::after {
+      content: '';
+      position: absolute; bottom: -2px; left: 0; right: 100%;
+      height: 1px; background: var(--ink);
+      transition: right .35s cubic-bezier(.23,1,.32,1);
+    }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-links a:hover::after { right: 0; }
+    .nav-cta {
+      font-size: 13px; font-weight: 500; letter-spacing: .02em;
+      color: var(--white); background: #181C2E;
+      border: none; padding: 10px 24px; border-radius: 100px;
+      cursor: none; transition: opacity .2s, transform .2s;
+    }
+    .nav-cta:hover { opacity: .75; transform: translateY(-1px); }
+
+    /* ── HERO ────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      padding: 160px 60px 100px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-left {}
+    .hero-tag {
+      font-size: 11px; font-weight: 500; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--ink-3);
+      margin-bottom: 36px;
+      display: flex; align-items: center; gap: 12px;
+      opacity: 0; animation: fadeUp .7s .1s forwards;
+    }
+    .hero-tag::before {
+      content: ''; display: block;
+      width: 32px; height: 1px; background: var(--ink-3);
+    }
+
+    .hero-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(64px, 8vw, 108px);
+      line-height: .92; letter-spacing: -.03em;
+      font-weight: 300;
+      opacity: 0; animation: fadeUp .9s .25s forwards;
+    }
+    .hero-title strong { font-weight: 600; }
+    .hero-title em { font-style: italic; color: var(--ink-2); }
+
+    .hero-sub {
+      margin-top: 36px;
+      font-size: 15px; font-weight: 400; line-height: 1.65;
+      color: var(--ink-2); max-width: 420px;
+      opacity: 0; animation: fadeUp .7s .45s forwards;
+    }
+
+    .hero-actions {
+      margin-top: 48px; display: flex; gap: 16px; align-items: center;
+      opacity: 0; animation: fadeUp .7s .6s forwards;
+    }
+    .btn-fill {
+      font-size: 13px; font-weight: 500; letter-spacing: .02em;
+      color: var(--white); background: #181C2E;
+      border: none; padding: 13px 30px; border-radius: 100px;
+      cursor: none; transition: opacity .2s, transform .2s;
+      position: relative; overflow: hidden;
+    }
+    .btn-fill::after {
+      content: ''; position: absolute;
+      inset: 0; background: rgba(255,255,255,0);
+      transition: background .2s;
+    }
+    .btn-fill:hover { transform: translateY(-2px); }
+    .btn-fill:hover::after { background: rgba(255,255,255,.1); }
+
+    .btn-outline {
+      font-size: 13px; font-weight: 400; letter-spacing: .02em;
+      color: var(--ink-2); background: transparent;
+      border: 1px solid var(--line); padding: 12px 28px; border-radius: 100px;
+      cursor: none; transition: border-color .2s, color .2s, transform .2s;
+    }
+    .btn-outline:hover { border-color: var(--ink-2); color: var(--ink); transform: translateY(-1px); }
+
+    /* ── HERO PHONES ─────────────────────────────────── */
+    .hero-right {
+      display: flex; justify-content: center; align-items: center;
+      perspective: 1400px;
+      opacity: 0; animation: fadeUp 1s .5s forwards;
+    }
+    .phones-group {
+      display: flex; gap: 16px; align-items: flex-end;
+      transform-style: preserve-3d;
+      transition: transform .6s cubic-bezier(.23,1,.32,1);
+    }
+
+    /* ── iPHONE MOCKUP ───────────────────────────────── */
+    /* outer wrapper — holds side buttons via absolute children */
+    .ipm {
+      position: relative;
+      display: inline-block;
+    }
+    .ph-sm .ipm { width: 160px; }
+    .ph-md .ipm { width: 196px; }
+
+    /* side button shared */
+    .ipm-btn {
+      position: absolute;
+      background: linear-gradient(to right, #2A2A2C, #3A3A3C);
+      border-radius: 2px;
+    }
+    /* power button – right */
+    .ipm-btn-power {
+      right: -3px; top: 28%;
+      width: 3px; height: 72px;
+      border-radius: 0 2px 2px 0;
+    }
+    /* silent switch – left top */
+    .ipm-btn-silent {
+      left: -3px; top: 18%;
+      width: 3px; height: 28px;
+      border-radius: 2px 0 0 2px;
+    }
+    /* vol up */
+    .ipm-btn-vup {
+      left: -3px; top: 30%;
+      width: 3px; height: 52px;
+      border-radius: 2px 0 0 2px;
+    }
+    /* vol down */
+    .ipm-btn-vdn {
+      left: -3px; top: 42.5%;
+      width: 3px; height: 52px;
+      border-radius: 2px 0 0 2px;
+    }
+
+    /* ── titanium frame — radius matches real iPhone 14 Pro ──
+       iPhone 14 Pro outer body: ~52pt radius, screen: 44pt.
+       We scale proportionally per mockup width.
+       280px big  → ×0.718 → frame 38px / screen 32px
+       196px mid  → ×0.503 → frame 26px / screen 22px
+       160px sm   → ×0.410 → frame 21px / screen 18px        */
+    .ipm-frame {
+      background: linear-gradient(160deg,
+        #4B4B4D 0%, #252527 30%, #1C1C1E 60%, #2E2E30 100%);
+      border-radius: 38px;          /* default = big phone */
+      padding: 10px 8px 13px;
+      position: relative;
+      box-shadow:
+        inset 0  1px 0   rgba(255,255,255,.20),
+        inset 0 -1px 0   rgba(0,0,0,.60),
+        inset  1px 0 0   rgba(255,255,255,.07),
+        inset -1px 0 0   rgba(255,255,255,.07),
+        0 0 0 1px        rgba(0,0,0,.85),
+        0  4px 12px      rgba(0,0,0,.25),
+        0 16px 48px      rgba(0,0,0,.35),
+        0 40px 90px      rgba(0,0,0,.25);
+    }
+
+    /* glass screen */
+    .ipm-screen {
+      position: relative;
+      border-radius: 32px;          /* default = big phone */
+      overflow: hidden;
+      background: #000;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.5);
+    }
+    .ipm-screen img { width: 100%; display: block; }
+
+    /* Dynamic Island */
+    .ipm-island {
+      position: absolute;
+      top: 11px; left: 50%; transform: translateX(-50%);
+      width: 34%; height: 9px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    /* home indicator */
+    .ipm-home {
+      position: absolute;
+      bottom: 6px; left: 50%; transform: translateX(-50%);
+      width: 34%; height: 4px;
+      background: rgba(255,255,255,.28);
+      border-radius: 4px;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    /* ── per-size overrides ─────────────────────────── */
+    .ph-sm { width: 160px; }
+    .ph-sm .ipm-frame  { border-radius: 21px; padding: 7px 6px 9px; }
+    .ph-sm .ipm-screen { border-radius: 18px; }
+    .ph-sm .ipm-island { width: 33%; height: 7px; top: 8px; }
+    .ph-sm .ipm-home   { height: 3px; bottom: 5px; }
+    .ph-sm .ipm-btn-silent { top: 17%; height: 20px; }
+    .ph-sm .ipm-btn-vup    { top: 29%; height: 36px; }
+    .ph-sm .ipm-btn-vdn    { top: 41%; height: 36px; }
+    .ph-sm .ipm-btn-power  { top: 28%; height: 50px; }
+
+    .ph-md { width: 196px; margin-bottom: 24px; }
+    .ph-md .ipm-frame  { border-radius: 26px; padding: 8px 7px 10px; }
+    .ph-md .ipm-screen { border-radius: 22px; }
+    .ph-md .ipm-island { width: 33%; height: 8px; top: 9px; }
+    .ph-md .ipm-home   { height: 3px; bottom: 5px; }
+    .ph-md .ipm-btn-silent { top: 17%; height: 24px; }
+    .ph-md .ipm-btn-vup    { top: 29%; height: 44px; }
+    .ph-md .ipm-btn-vdn    { top: 41%; height: 44px; }
+    .ph-md .ipm-btn-power  { top: 28%; height: 60px; }
+
+    /* status bar */
+    .sbar {
+      padding: 14px 18px 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .sbar-time { font-size: 11px; font-weight: 600; color: #1C1C1E; letter-spacing: -.3px; }
+    .sbar-icons { display: flex; align-items: center; gap: 5px; }
+    .sbar-icons svg { display: block; }
+
+    /* nav bar inside phone */
+    .pnav {
+      padding: 4px 14px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .pnav-back { font-size: 14px; color: #007AFF; font-weight: 400; display: flex; align-items: center; gap: 2px; }
+    .pnav-back svg { width: 8px; height: 12px; }
+    .pnav-title {
+      font-size: 14px; font-weight: 600; color: #1C1C1E;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .pnav-action { font-size: 20px; color: #1C1C1E; font-weight: 300; line-height: 1; }
+    .ph-body { padding: 8px 16px 20px; }
+
+    /* ── PHONE SCREEN: HOME ──────────────────────────── */
+    .home-header {
+      padding: 4px 16px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .home-header-title { font-size: 17px; font-weight: 600; color: #1C1C1E; letter-spacing: -.3px; }
+    .home-menu { font-size: 18px; color: #1C1C1E; }
+    .home-rows { padding: 0 16px; }
+    .home-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(0,0,0,.06);
+    }
+    .home-row:last-child { border-bottom: none; }
+    .home-row-icon { font-size: 20px; }
+    .home-row-label { font-size: 15px; font-weight: 400; color: #1C1C1E; letter-spacing: -.2px; }
+    .home-input-area {
+      margin: 12px 14px 0;
+      background: #F2F2F7;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .home-input-text { font-size: 12px; color: #8E8E93; }
+    .home-chips {
+      display: flex; gap: 6px; padding: 8px 14px;
+      overflow: hidden;
+    }
+    .home-chip {
+      font-size: 10px; font-weight: 500;
+      padding: 5px 10px; border-radius: 100px;
+      background: #F2F2F7; color: #3C3C43;
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    /* ── PHONE SCREEN: NOTES LIST ────────────────────── */
+    .notes-filter-row {
+      display: flex; gap: 6px; padding: 0 0 12px;
+      overflow: hidden;
+    }
+    .nf-chip {
+      font-size: 11px; font-weight: 500; letter-spacing: -.1px;
+      padding: 4px 12px; border-radius: 100px;
+      background: #F2F2F7; color: #3C3C43;
+      white-space: nowrap; flex-shrink: 0; border: none;
+    }
+    .nf-chip.on { background: var(--app-purple); color: #fff; }
+    .notes-section-hd {
+      font-size: 11px; font-weight: 600; color: #8E8E93; letter-spacing: -.1px;
+      margin-bottom: 6px; margin-top: 4px;
+    }
+    .note-row {
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+      display: flex; justify-content: space-between; align-items: flex-start;
+    }
+    .note-row:last-child { border-bottom: none; }
+    .note-row-title { font-size: 12px; font-weight: 500; color: #1C1C1E; line-height: 1.3; letter-spacing: -.15px; }
+    .note-row-sub { font-size: 10px; color: #8E8E93; margin-top: 2px; }
+    .note-row-dots { font-size: 12px; color: #C7C7CC; flex-shrink: 0; margin-left: 8px; }
+
+    /* ── PHONE SCREEN: TASKS LIST ────────────────────── */
+    .tasks-header-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .tasks-title { font-size: 13px; font-weight: 600; color: #1C1C1E; letter-spacing: -.2px; }
+    .task-group { margin-bottom: 12px; }
+    .task-group-hd {
+      font-size: 11px; font-weight: 600; letter-spacing: -.1px;
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 6px;
+    }
+    .tg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .task-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.05);
+    }
+    .task-check {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1.5px solid #C7C7CC;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .task-check.done {
+      background: var(--app-green); border-color: var(--app-green);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .task-check.done::after { content: '✓'; font-size: 9px; color: #fff; font-weight: 700; }
+    .task-row-text { font-size: 10.5px; color: #1C1C1E; line-height: 1.4; letter-spacing: -.15px; }
+    .task-row-text.done { text-decoration: line-through; color: #8E8E93; }
+    .task-row-date { font-size: 9px; color: #8E8E93; margin-top: 2px; }
+
+    /* ── PHONE SCREEN: RECORDER ──────────────────────── */
+    .rec-bar {
+      background: #FF3B30;
+      border-radius: 14px; padding: 12px 14px;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .rec-timer { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -.5px; }
+    .rec-waves { display: flex; gap: 2px; align-items: center; flex: 1; }
+    .rec-wave {
+      width: 2.5px; background: rgba(255,255,255,.8); border-radius: 3px;
+      animation: wv .7s ease-in-out infinite;
+    }
+    .rec-wave:nth-child(1){height:5px;animation-delay:0s}
+    .rec-wave:nth-child(2){height:12px;animation-delay:.08s}
+    .rec-wave:nth-child(3){height:7px;animation-delay:.16s}
+    .rec-wave:nth-child(4){height:16px;animation-delay:.12s}
+    .rec-wave:nth-child(5){height:9px;animation-delay:.04s}
+    .rec-wave:nth-child(6){height:13px;animation-delay:.2s}
+    .rec-wave:nth-child(7){height:6px;animation-delay:.28s}
+    @keyframes wv { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.7)} }
+    .rec-pause { font-size: 18px; flex-shrink: 0; }
+    .rec-meeting-title { font-size: 12px; font-weight: 600; color: #1C1C1E; margin-bottom: 3px; letter-spacing: -.15px; }
+    .rec-meta { font-size: 9.5px; color: #8E8E93; margin-bottom: 10px; line-height: 1.4; }
+    .rec-line { font-size: 10px; color: #3C3C43; line-height: 1.55; margin-bottom: 6px; }
+    .rec-spk { font-weight: 600; color: #1C1C1E; }
+
+    /* ── MARQUEE ─────────────────────────────────────── */
+    .marquee {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      overflow: hidden; position: relative; z-index: 2;
+      padding: 14px 0;
+      background: var(--cream-2);
+    }
+    .mq-track {
+      display: flex; gap: 0; animation: mq 28s linear infinite;
+      width: max-content;
+    }
+    .mq-item {
+      display: flex; align-items: center; gap: 0;
+      font-size: 12px; font-weight: 400; color: var(--ink-3);
+      letter-spacing: .04em; white-space: nowrap;
+    }
+    .mq-sep {
+      width: 1px; height: 12px; background: var(--line);
+      margin: 0 28px; flex-shrink: 0;
+    }
+    @keyframes mq { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+    /* ── SECTION BASE ────────────────────────────────── */
+    .sec {
+      border-bottom: 1px solid var(--line);
+      position: relative;
+    }
+    .sec-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 120px 60px;
+    }
+    .sec-label {
+      font-size: 11px; font-weight: 500; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--ink-3);
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .sec-label::before {
+      content: ''; display: block;
+      width: 24px; height: 1px; background: var(--ink-3);
+    }
+    .sec-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(44px, 5.5vw, 80px);
+      font-weight: 300; letter-spacing: -.03em; line-height: .95;
+    }
+    .sec-title strong { font-weight: 600; }
+    .sec-title em { font-style: italic; color: var(--ink-2); }
+
+    /* ── PROBLEM ─────────────────────────────────────── */
+    .prob-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 80px; margin-top: 80px; align-items: start;
+    }
+    .prob-items { display: flex; flex-direction: column; }
+    .prob-item {
+      padding: 28px 0;
+      border-top: 1px solid var(--line);
+      display: grid; grid-template-columns: 40px 1fr; gap: 20px;
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .7s ease, transform .7s cubic-bezier(.23,1,.32,1);
+    }
+    .prob-item:last-child { border-bottom: 1px solid var(--line); }
+    .prob-item.on { opacity: 1; transform: translateY(0); }
+    .prob-num { font-size: 11px; font-weight: 500; color: var(--ink-3); padding-top: 3px; }
+    .prob-text { font-size: 16px; font-weight: 400; color: var(--ink); line-height: 1.55; }
+
+    .prob-visual {
+      display: flex; flex-direction: column; gap: 0;
+      opacity: 0; transform: translateY(30px);
+      transition: opacity .8s .2s ease, transform .8s .2s cubic-bezier(.23,1,.32,1);
+    }
+    .prob-visual.on { opacity: 1; transform: translateY(0); }
+
+    .tool-stack {
+      border: 1px solid var(--line); border-radius: 20px;
+      padding: 32px; background: var(--white);
+    }
+    .ts-label {
+      font-size: 11px; font-weight: 500; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--ink-3); margin-bottom: 20px;
+    }
+    .ts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .ts-chip {
+      padding: 16px 10px 14px; border-radius: 12px; text-align: center;
+      background: var(--white); border: 1px solid var(--line);
+      font-size: 11.5px; color: var(--ink-2); font-weight: 400;
+      transition: border-color .2s, color .2s, box-shadow .2s;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .ts-chip:hover { border-color: var(--ink-3); color: var(--ink); box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    .ts-chip-ico { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; }
+    .vs-arrow {
+      text-align: center; padding: 16px 0;
+      font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--ink-3); display: flex; align-items: center; gap: 12px;
+    }
+    .vs-arrow::before, .vs-arrow::after {
+      content: ''; flex: 1; height: 1px; background: var(--line);
+    }
+    .solution-box {
+      border: 1px solid #181C2E; border-radius: 20px;
+      padding: 28px 32px;
+      background: #181C2E; color: var(--white);
+      text-align: center;
+    }
+    .sb-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px; font-weight: 400; margin-bottom: 4px;
+    }
+    .sb-sub { font-size: 13px; color: rgba(250,248,244,.55); }
+
+    /* ── PRODUCT ─────────────────────────────────────── */
+    .product-sec { background: var(--cream-2); }
+
+    .prod-tabs {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--line);
+      margin-top: 60px; margin-bottom: 70px;
+    }
+    .prod-tab {
+      padding: 14px 0; margin-right: 40px;
+      font-size: 14px; font-weight: 400; color: var(--ink-3);
+      background: none; border: none; cursor: none;
+      position: relative;
+      transition: color .2s;
+    }
+    .prod-tab::after {
+      content: ''; position: absolute;
+      bottom: -1px; left: 0; right: 100%; height: 1px;
+      background: var(--ink);
+      transition: right .35s cubic-bezier(.23,1,.32,1);
+    }
+    .prod-tab.on { color: var(--ink); }
+    .prod-tab.on::after { right: 0; }
+
+    .prod-panel { display: none; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+    .prod-panel.on { display: grid; }
+
+    .prod-content {}
+    .prod-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(40px, 4vw, 60px);
+      font-weight: 300; letter-spacing: -.03em; line-height: .95;
+      margin-bottom: 20px;
+    }
+    .prod-title strong { font-weight: 600; }
+    .prod-desc { font-size: 15px; color: var(--ink-2); line-height: 1.65; margin-bottom: 36px; }
+    .feat-list { display: flex; flex-direction: column; gap: 0; }
+    .feat-item {
+      display: grid; grid-template-columns: 24px 1fr; gap: 14px;
+      padding: 18px 0; border-top: 1px solid var(--line);
+      transition: padding .2s;
+    }
+    .feat-item:last-child { border-bottom: 1px solid var(--line); }
+    .feat-item:hover { padding-left: 8px; }
+    .feat-ico { font-size: 14px; padding-top: 2px; }
+    .feat-name { font-size: 14px; font-weight: 500; color: var(--ink); }
+    .feat-sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+    .prod-visual { display: flex; justify-content: center; }
+
+    /* ── BIG PHONE WRAPPER ───────────────────────────── */
+    .bigph-wrap {
+      opacity: 0; transform: translateY(40px);
+      transition: opacity .9s ease, transform .9s cubic-bezier(.23,1,.32,1);
+    }
+    .bigph-wrap.on { opacity: 1; transform: translateY(0); }
+
+    /* big phone — 280px wide, ×0.718 of real iPhone */
+    .bigph-wrap { width: 280px; }
+    .bigph-wrap .ipm-frame  { border-radius: 38px; padding: 10px 8px 13px; }
+    .bigph-wrap .ipm-screen { border-radius: 32px; }
+    .bigph-wrap .ipm-island { width: 34%; height: 9px; top: 11px; }
+
+    /* ── ENTITIES ────────────────────────────────────── */
+    .entity-row {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; margin-top: 80px;
+      border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+    }
+    .ent-card {
+      padding: 40px 32px; background: var(--white);
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+      opacity: 0; transform: translateY(20px);
+      transition: background .3s, opacity .7s ease, transform .7s cubic-bezier(.23,1,.32,1);
+    }
+    .ent-card:last-child { border-right: none; }
+    .ent-card.on { opacity: 1; transform: translateY(0); }
+    .ent-card:hover { background: var(--cream); }
+    .ent-ico { font-size: 24px; margin-bottom: 16px; }
+    .ent-title { font-size: 16px; font-weight: 600; color: var(--ink); margin-bottom: 8px; letter-spacing: -.02em; }
+    .ent-desc { font-size: 13px; color: var(--ink-3); line-height: 1.55; flex: 1; }
+    .ent-link { margin-top: 24px; }
+
+    /* linking arrows between cards */
+    .ent-link {
+      font-size: 11px; color: var(--ink-3); letter-spacing: .1em;
+      text-transform: uppercase;
+      text-align: center; padding: 20px 8px 0;
+    }
+
+    /* ── STATS ───────────────────────────────────────── */
+    .stats-sec { background: #181C2E; color: var(--white); }
+    .stats-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 100px 60px;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+    }
+    .stat-cell {
+      padding: 0 40px 0 0;
+      border-right: 1px solid rgba(255,255,255,.1);
+    }
+    .stat-cell:first-child { padding-left: 0; }
+    .stat-cell:last-child { border-right: none; padding-right: 0; padding-left: 40px; }
+    .stat-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 72px; font-weight: 300; line-height: 1;
+      letter-spacing: -.04em; color: var(--white);
+    }
+    .stat-unit { font-size: 32px; font-weight: 300; }
+    .stat-lbl { font-size: 13px; color: rgba(250,248,244,.45); margin-top: 12px; line-height: 1.5; }
+
+    /* ── ROADMAP ─────────────────────────────────────── */
+    .rm-items { margin-top: 80px; display: flex; flex-direction: column; gap: 0; }
+    .rm-item {
+      display: grid; grid-template-columns: 200px 1fr;
+      gap: 60px; padding: 48px 0;
+      border-top: 1px solid var(--line);
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .7s ease, transform .7s cubic-bezier(.23,1,.32,1);
+    }
+    .rm-item:last-child { border-bottom: 1px solid var(--line); }
+    .rm-item.on { opacity: 1; transform: translateY(0); }
+    .rm-left {}
+    .rm-phase {
+      font-size: 11px; font-weight: 500; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px;
+    }
+    .rm-period {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px; font-weight: 400; color: var(--ink);
+    }
+    .rm-right {}
+    .rm-title {
+      font-size: 22px; font-weight: 600; color: var(--ink);
+      letter-spacing: -.02em; margin-bottom: 12px;
+    }
+    .rm-desc { font-size: 14px; color: var(--ink-2); line-height: 1.65; max-width: 540px; margin-bottom: 20px; }
+    .rm-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .rm-tag {
+      font-size: 11px; font-weight: 500; letter-spacing: .02em;
+      padding: 4px 12px; border-radius: 100px;
+      border: 1px solid var(--line); color: var(--ink-2);
+    }
+
+    /* ── AI СТРАТЕГ ──────────────────────────────────── */
+    .ais-sec { background: var(--ink); }
+    .ais-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 120px 60px;
+      display: grid; grid-template-columns: 1fr 1.15fr;
+      gap: 80px; align-items: center;
+    }
+    .ais-label {
+      font-size: 10px; font-weight: 600; letter-spacing: .14em;
+      text-transform: uppercase; color: rgba(238,242,250,.35);
+      margin-bottom: 20px;
+    }
+    .ais-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(44px, 5vw, 72px); font-weight: 300;
+      line-height: .95; letter-spacing: -.03em;
+      color: var(--white); margin-bottom: 28px;
+    }
+    .ais-title em { font-style: italic; color: rgba(238,242,250,.55); }
+    .ais-title strong { font-weight: 600; }
+    .ais-desc { font-size: 15px; color: rgba(238,242,250,.5); line-height: 1.7; max-width: 400px; margin-bottom: 40px; }
+    .ais-feats { display: flex; flex-direction: column; gap: 16px; }
+    .ais-feat {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 16px 20px; border-radius: 12px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.07);
+    }
+    .ais-feat-ico { font-size: 16px; flex-shrink: 0; line-height: 1.5; }
+    .ais-feat-text { }
+    .ais-feat-name { font-size: 13px; font-weight: 500; color: rgba(238,242,250,.85); margin-bottom: 2px; }
+    .ais-feat-sub { font-size: 12px; color: rgba(238,242,250,.4); line-height: 1.5; }
+    .ais-feat-badge {
+      margin-top: 6px; display: inline-block;
+      font-size: 9px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: rgba(238,242,250,.35);
+      border: 1px solid rgba(238,242,250,.15); border-radius: 4px;
+      padding: 2px 7px;
+    }
+    /* desktop mockup */
+    .ais-mock { perspective: 1000px; }
+    .ais-browser {
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 2px 0 rgba(255,255,255,.08) inset,
+                  0 60px 120px rgba(0,0,0,.55), 0 20px 40px rgba(0,0,0,.3);
+      transform: rotateY(-5deg) rotateX(2deg);
+      transition: transform .7s cubic-bezier(.23,1,.32,1);
+    }
+    .ais-mock:hover .ais-browser { transform: rotateY(0) rotateX(0); }
+    .ais-chrome {
+      background: #E2E8F2; padding: 9px 14px;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid rgba(0,0,0,.08);
+    }
+    .ais-dots { display: flex; gap: 5px; }
+    .ais-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .ais-dot:nth-child(1) { background: #FF5F57; }
+    .ais-dot:nth-child(2) { background: #FFBD2E; }
+    .ais-dot:nth-child(3) { background: #28C840; }
+    .ais-urlbar {
+      flex: 1; background: rgba(0,0,0,.07); border-radius: 6px;
+      height: 22px; display: flex; align-items: center;
+      padding: 0 10px; font-size: 10px; color: rgba(0,0,0,.3);
+    }
+    .ais-screen { display: block; line-height: 0; }
+
+    /* ── RUN ─────────────────────────────────────────── */
+    .run-sec { background: var(--cream-2); }
+    .run-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; margin-top: 80px;
+      border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+    }
+    .run-card {
+      padding: 48px 40px;
+      border-right: 1px solid var(--line);
+      background: var(--white);
+      display: flex; flex-direction: column;
+      opacity: 0; transform: translateY(20px);
+      transition: background .3s, opacity .7s ease, transform .7s cubic-bezier(.23,1,.32,1);
+    }
+    .run-card:last-child { border-right: none; }
+    .run-card.on { opacity: 1; transform: translateY(0); }
+    .run-card.featured { background: #181C2E; }
+    .run-card-tag {
+      font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--ink-3); margin-bottom: 10px;
+    }
+    .run-card.featured .run-card-tag { color: rgba(255,255,255,.35); }
+    .run-card-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 34px; font-weight: 400; letter-spacing: -.02em;
+      color: var(--ink); margin-bottom: 12px; line-height: 1;
+    }
+    .run-card.featured .run-card-title { color: var(--white); }
+    .run-card-desc {
+      font-size: 13px; color: var(--ink-2); line-height: 1.65; margin-bottom: 28px;
+    }
+    .run-card.featured .run-card-desc { color: rgba(255,255,255,.5); }
+    .run-divider { border: none; border-top: 1px solid var(--line); margin-bottom: 24px; }
+    .run-card.featured .run-divider { border-color: rgba(255,255,255,.1); }
+    .run-list { display: flex; flex-direction: column; gap: 11px; list-style: none; flex: 1; }
+    .run-item { font-size: 13px; color: var(--ink-2); display: flex; gap: 12px; line-height: 1.5; }
+    .run-item::before { content: '—'; color: var(--ink-3); flex-shrink: 0; }
+    .run-card.featured .run-item { color: rgba(255,255,255,.6); }
+    .run-card.featured .run-item::before { color: rgba(255,255,255,.25); }
+    /* bottom label */
+    .run-bottom {
+      margin-top: 28px; padding-top: 20px;
+      border-top: 1px solid var(--line);
+      font-size: 11px; font-weight: 500; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--ink-3);
+    }
+    .run-card.featured .run-bottom { border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.3); }
+
+    /* ── CTA ─────────────────────────────────────────── */
+    .cta-sec { background: var(--cream); }
+    .cta-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 160px 60px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 80px; align-items: center;
+    }
+    .cta-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(52px, 6vw, 88px);
+      font-weight: 300; letter-spacing: -.04em; line-height: .92;
+    }
+    .cta-title strong { font-weight: 600; }
+    .cta-right {}
+    .cta-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px; font-style: italic; font-weight: 300;
+      color: var(--ink-2); line-height: 1.55; margin-bottom: 40px;
+    }
+    .cta-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+
+    /* ── FOOTER ──────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 40px 60px;
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--cream);
+    }
+    .ft-logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 18px; font-weight: 400; color: var(--ink);
+    }
+    .ft-links { display: flex; gap: 32px; }
+    .ft-links a { font-size: 12px; color: var(--ink-3); text-decoration: none; letter-spacing: .02em; transition: color .2s; }
+    .ft-links a:hover { color: var(--ink); }
+    .ft-copy { font-size: 12px; color: var(--ink-3); }
+
+    /* ── ANIMATIONS ──────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity .8s ease, transform .8s cubic-bezier(.23,1,.32,1);
+    }
+    .reveal.on { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: .1s !important; }
+    .d2 { transition-delay: .2s !important; }
+    .d3 { transition-delay: .3s !important; }
+
+    /* phone clip reveal */
+    .ph-reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity .9s ease, transform .9s cubic-bezier(.23,1,.32,1);
+    }
+    .ph-reveal.on { opacity: 1; transform: translateY(0); }
+
+    /* ── RESPONSIVE ──────────────────────────────────── */
+    @media (max-width: 960px) {
+      nav { padding: 20px 24px; }
+      .nav-links { display: none; }
+      .hero { grid-template-columns: 1fr; padding: 140px 24px 60px; }
+      .hero-right { display: none; }
+      .sec-inner { padding: 80px 24px; }
+      .prob-grid { grid-template-columns: 1fr; }
+      .prod-panel.on { grid-template-columns: 1fr; }
+      .entity-row { grid-template-columns: repeat(2, 1fr); }
+      .stats-inner { grid-template-columns: repeat(2, 1fr); gap: 40px; padding: 80px 24px; }
+      .stat-cell { border-right: none; padding: 0; }
+      .rm-item { grid-template-columns: 1fr; gap: 16px; }
+      .ais-inner { grid-template-columns: 1fr; gap: 48px; padding: 80px 24px; }
+      .ais-browser { transform: none; }
+      .run-grid { grid-template-columns: 1fr; }
+      .run-card { border-right: none; border-bottom: 1px solid var(--line); }
+      .cta-inner { grid-template-columns: 1fr; padding: 80px 24px; }
+      footer { flex-direction: column; gap: 20px; text-align: center; padding: 32px 24px; }
+      .ft-links { flex-wrap: wrap; justify-content: center; }
+    }
+
+    ::selection { background: rgba(28,26,23,.12); }
+  </style>
+</head>
+<body>
+
+<!-- CURSOR -->
+<div id="cur">
+  <div class="c-dot"></div>
+  <div class="c-ring"></div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-logo">поток <em>x</em></div>
+  <ul class="nav-links">
+    <li><a href="#product">продукт</a></li>
+    <li><a href="#tech">технология</a></li>
+    <li><a href="#ai-strateg">ai стратег</a></li>
+    <li><a href="#roadmap">roadmap</a></li>
+    <li><a href="#run">run</a></li>
+  </ul>
+  <button class="nav-cta">получить доступ</button>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-tag">ai operating system · 2026</div>
+    <h1 class="hero-title">
+      информация<br>
+      не <em>хранится</em> —<br>
+      <strong>она действует</strong>
+    </h1>
+    <p class="hero-sub">
+      AI-нативная платформа для knowledge workers. Заметки, задачи и встречи — в едином workspace, связанном интеллектом.
+    </p>
+    <div class="hero-actions">
+      <button class="btn-fill">начать бесплатно →</button>
+      <button class="btn-outline">смотреть демо</button>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="phones-group" id="phones">
+      <!-- Phone 1: Notes list -->
+      <div class="ph-sm ph-reveal" style="transition-delay:.1s">
+        <div class="ipm">
+          <div class="ipm-btn ipm-btn-silent"></div>
+          <div class="ipm-btn ipm-btn-vup"></div>
+          <div class="ipm-btn ipm-btn-vdn"></div>
+          <div class="ipm-btn ipm-btn-power"></div>
+          <div class="ipm-frame">
+            <div class="ipm-screen">
+              <div class="ipm-island"></div>
+              <img src="screens/notes-list.png">
+              <div class="ipm-home"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone 2: Home screen (CENTRE) -->
+      <div class="ph-md ph-reveal" style="transition-delay:.25s">
+        <div class="ipm">
+          <div class="ipm-btn ipm-btn-silent"></div>
+          <div class="ipm-btn ipm-btn-vup"></div>
+          <div class="ipm-btn ipm-btn-vdn"></div>
+          <div class="ipm-btn ipm-btn-power"></div>
+          <div class="ipm-frame">
+            <div class="ipm-screen">
+              <div class="ipm-island"></div>
+              <img src="screens/home.png">
+              <div class="ipm-home"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone 3: Recorder -->
+      <div class="ph-sm ph-reveal" style="transition-delay:.4s">
+        <div class="ipm">
+          <div class="ipm-btn ipm-btn-silent"></div>
+          <div class="ipm-btn ipm-btn-vup"></div>
+          <div class="ipm-btn ipm-btn-vdn"></div>
+          <div class="ipm-btn ipm-btn-power"></div>
+          <div class="ipm-frame">
+            <div class="ipm-screen">
+              <div class="ipm-island"></div>
+              <img src="screens/recorder.png">
+              <div class="ipm-home"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="mq-track">
+    <span class="mq-item">notes</span><span class="mq-sep"></span>
+    <span class="mq-item">tasks</span><span class="mq-sep"></span>
+    <span class="mq-item">recorder</span><span class="mq-sep"></span>
+    <span class="mq-item">ai summarization</span><span class="mq-sep"></span>
+    <span class="mq-item">entity linking</span><span class="mq-sep"></span>
+    <span class="mq-item">semantic search</span><span class="mq-sep"></span>
+    <span class="mq-item">meeting intelligence</span><span class="mq-sep"></span>
+    <span class="mq-item">agentic workflows</span><span class="mq-sep"></span>
+    <span class="mq-item">knowledge graph</span><span class="mq-sep"></span>
+    <span class="mq-item">notes</span><span class="mq-sep"></span>
+    <span class="mq-item">tasks</span><span class="mq-sep"></span>
+    <span class="mq-item">recorder</span><span class="mq-sep"></span>
+    <span class="mq-item">ai summarization</span><span class="mq-sep"></span>
+    <span class="mq-item">entity linking</span><span class="mq-sep"></span>
+    <span class="mq-item">semantic search</span><span class="mq-sep"></span>
+    <span class="mq-item">meeting intelligence</span><span class="mq-sep"></span>
+    <span class="mq-item">agentic workflows</span><span class="mq-sep"></span>
+    <span class="mq-item">knowledge graph</span><span class="mq-sep"></span>
+  </div>
+</div>
+
+<!-- ── PROBLEM ─────────────────────────────────────── -->
+<section class="sec" id="problem">
+  <div class="sec-inner">
+    <div class="sec-label reveal">проблема рынка</div>
+    <h2 class="sec-title reveal d1">
+      knowledge workers<br>
+      тратят время на <em>инструменты,</em><br>
+      <strong>не на работу</strong>
+    </h2>
+
+    <div class="prob-grid">
+      <div class="prob-items">
+        <div class="prob-item">
+          <div class="prob-num">01</div>
+          <div class="prob-text">Пользователи используют 3–5 разных инструментов для заметок, задач и встреч</div>
+        </div>
+        <div class="prob-item">
+          <div class="prob-num">02</div>
+          <div class="prob-text">Контекст теряется между meeting notes, тасками и личными заметками</div>
+        </div>
+        <div class="prob-item">
+          <div class="prob-num">03</div>
+          <div class="prob-text">Нет нативной AI-связки между capture → structure → execution</div>
+        </div>
+      </div>
+
+      <div class="prob-visual">
+        <div class="tool-stack">
+          <div class="ts-label">текущий стек</div>
+          <div class="ts-grid">
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Notion cube logo -->
+                <svg width="30" height="30" viewBox="0 0 100 108" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <!-- front face -->
+                  <path d="M8 24 L8 96 L74 96 L74 24 Z" fill="white"/>
+                  <!-- top face -->
+                  <path d="M8 24 L22 10 L88 10 L74 24 Z" fill="white"/>
+                  <!-- right face -->
+                  <path d="M74 24 L88 10 L88 82 L74 96 Z" fill="#1a1a1a"/>
+                  <!-- outlines -->
+                  <path d="M8 24 L8 96 L74 96 L74 24 Z" stroke="black" stroke-width="6" stroke-linejoin="round" fill="none"/>
+                  <path d="M8 24 L22 10 L88 10 L74 24 Z" stroke="black" stroke-width="6" stroke-linejoin="round" fill="none"/>
+                  <path d="M74 24 L88 10 L88 82 L74 96 Z" stroke="black" stroke-width="6" stroke-linejoin="round" fill="none"/>
+                  <!-- serif N -->
+                  <path d="M22 84 L22 38 L27 38 L53 72 L53 38 L59 38 L59 84 L54 84 L28 50 L28 84 Z" fill="black"/>
+                </svg>
+              </span>
+              Notion
+            </div>
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Todoist -->
+                <svg width="28" height="28" viewBox="0 0 228 228" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="228" height="228" rx="50" fill="#DB4035"/><path d="M183 80L103 160L45 102" stroke="white" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              Todoist
+            </div>
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Otter.ai -->
+                <svg width="30" height="30" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" rx="44" fill="#1DD3B0"/><path d="M100 44C69.1 44 44 69.1 44 100C44 130.9 69.1 156 100 156C130.9 156 156 130.9 156 100C156 69.1 130.9 44 100 44ZM75 88C75 83.6 78.6 80 83 80C87.4 80 91 83.6 91 88C91 92.4 87.4 96 83 96C78.6 96 75 92.4 75 88ZM117 88C117 83.6 120.6 80 125 80C129.4 80 133 83.6 133 88C133 92.4 129.4 96 125 96C120.6 96 117 92.4 117 88ZM130 116C125.2 124.8 113.2 131 100 131C86.8 131 74.8 124.8 70 116H130Z" fill="white"/></svg>
+              </span>
+              Otter.ai
+            </div>
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Google Calendar -->
+                <svg width="28" height="28" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" rx="10" fill="white"/><rect x="2" y="2" width="196" height="196" rx="9" fill="white" stroke="#E0E0E0" stroke-width="4"/><rect x="2" y="50" width="196" height="148" rx="0" fill="white"/><rect x="2" y="50" width="196" height="148" rx="9" fill="white"/><rect x="2" y="50" width="196" height="56" fill="#4285F4"/><path d="M2 80h196v26H2z" fill="#1565C0"/><rect x="2" y="106" width="196" height="92" rx="0" fill="white"/><rect x="2" y="98" width="196" height="10" fill="white"/><text x="100" y="86" text-anchor="middle" font-family="Arial" font-weight="700" font-size="28" fill="white">17</text><text x="100" y="46" text-anchor="middle" font-family="Arial" font-weight="700" font-size="22" fill="#DB4437">JUL</text><line x1="2" y1="130" x2="198" y2="130" stroke="#E0E0E0" stroke-width="2"/><line x1="2" y1="160" x2="198" y2="160" stroke="#E0E0E0" stroke-width="2"/><line x1="70" y1="106" x2="70" y2="198" stroke="#E0E0E0" stroke-width="2"/><line x1="130" y1="106" x2="130" y2="198" stroke="#E0E0E0" stroke-width="2"/><circle cx="42" cy="26" r="10" fill="#DB4437"/><circle cx="158" cy="26" r="10" fill="#DB4437"/></svg>
+              </span>
+              Calendar
+            </div>
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Slack -->
+                <svg width="28" height="28" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M43 120C43 130.5 34.5 139 24 139C13.5 139 5 130.5 5 120C5 109.5 13.5 101 24 101H43V120Z" fill="#E01E5A"/><path d="M52.5 120C52.5 109.5 61 101 71.5 101C82 101 90.5 109.5 90.5 120V176C90.5 186.5 82 195 71.5 195C61 195 52.5 186.5 52.5 176V120Z" fill="#E01E5A"/><path d="M71.5 43C61 43 52.5 34.5 52.5 24C52.5 13.5 61 5 71.5 5C82 5 90.5 13.5 90.5 24V43H71.5Z" fill="#36C5F0"/><path d="M71.5 52.5C82 52.5 90.5 61 90.5 71.5C90.5 82 82 90.5 71.5 90.5H15.5C5 90.5 -3.5 82 -3.5 71.5C-3.5 61 5 52.5 15.5 52.5H71.5Z" fill="#36C5F0"/><path d="M148.5 71.5C148.5 61 157 52.5 167.5 52.5C178 52.5 186.5 61 186.5 71.5C186.5 82 178 90.5 167.5 90.5H148.5V71.5Z" fill="#2EB67D"/><path d="M139 71.5C139 82 130.5 90.5 120 90.5C109.5 90.5 101 82 101 71.5V15.5C101 5 109.5 -3.5 120 -3.5C130.5 -3.5 139 5 139 15.5V71.5Z" fill="#2EB67D"/><path d="M120 148.5C130.5 148.5 139 157 139 167.5C139 178 130.5 186.5 120 186.5C109.5 186.5 101 178 101 167.5V148.5H120Z" fill="#ECB22E"/><path d="M120 139C109.5 139 101 130.5 101 120C101 109.5 109.5 101 120 101H176C186.5 101 195 109.5 195 120C195 130.5 186.5 139 176 139H120Z" fill="#ECB22E"/></svg>
+              </span>
+              Slack
+            </div>
+            <div class="ts-chip">
+              <span class="ts-chip-ico">
+                <!-- Jira -->
+                <svg width="28" height="28" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="jg1" x1="100" y1="100" x2="160" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#2684FF"/><stop offset="100%" stop-color="#0052CC"/></linearGradient><linearGradient id="jg2" x1="100" y1="100" x2="40" y2="160" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#2684FF"/><stop offset="100%" stop-color="#0052CC"/></linearGradient></defs><path d="M98.5 10L10 98.5L55 143.5L98.5 100L190 10H98.5Z" fill="url(#jg1)"/><path d="M101.5 190L190 101.5L145 56.5L101.5 100L10 190H101.5Z" fill="url(#jg2)"/></svg>
+              </span>
+              Jira
+            </div>
+          </div>
+        </div>
+        <div class="vs-arrow">заменяется на</div>
+        <div class="solution-box">
+          <div class="sb-title">поток <em>x</em></div>
+          <div class="sb-sub">единый ai workspace</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PRODUCT ─────────────────────────────────────── -->
+<section class="sec product-sec" id="product">
+  <div class="sec-inner">
+    <div class="sec-label reveal">продуктовое решение</div>
+    <h2 class="sec-title reveal d1">
+      три модуля.<br>
+      <em>один поток</em> <strong>мышления.</strong>
+    </h2>
+
+    <div class="prod-tabs">
+      <button class="prod-tab on" data-tab="notes">notes</button>
+      <button class="prod-tab" data-tab="tasks">tasks</button>
+      <button class="prod-tab" data-tab="recorder">recorder</button>
+    </div>
+
+    <!-- NOTES -->
+    <div class="prod-panel on" id="pp-notes">
+      <div class="prod-content">
+        <div class="prod-title">структурированные<br><em>заметки</em> и<br><strong>база знаний</strong></div>
+        <div class="prod-desc">База знаний, которая не просто хранит — а понимает контекст, связывает идеи с задачами и встречами, помогает думать быстрее.</div>
+        <div class="feat-list">
+          <div class="feat-item"><div class="feat-ico">✦</div><div><div class="feat-name">AI-форматирование</div><div class="feat-sub">Автоматические заголовки, теги и резюме</div></div></div>
+          <div class="feat-item"><div class="feat-ico">🔗</div><div><div class="feat-name">Linked mentions</div><div class="feat-sub">Связи с проектами, задачами и людьми</div></div></div>
+          <div class="feat-item"><div class="feat-ico">🔍</div><div><div class="feat-name">Semantic search</div><div class="feat-sub">Поиск по смыслу, не только по словам</div></div></div>
+        </div>
+      </div>
+      <div class="prod-visual">
+        <div class="bigph-wrap" id="bpw-notes">
+          <div class="ipm">
+            <div class="ipm-btn ipm-btn-silent"></div>
+            <div class="ipm-btn ipm-btn-vup"></div>
+            <div class="ipm-btn ipm-btn-vdn"></div>
+            <div class="ipm-btn ipm-btn-power"></div>
+            <div class="ipm-frame">
+              <div class="ipm-screen">
+                <div class="ipm-island"></div>
+                <img src="screens/notes-list.png" style="width:100%;display:block">
+                <div class="ipm-home"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TASKS -->
+    <div class="prod-panel" id="pp-tasks">
+      <div class="prod-content">
+        <div class="prod-title">умное<br><em>управление</em><br><strong>задачами</strong></div>
+        <div class="prod-desc">Задачи, которые понимают контекст встреч и заметок. AI автоматически извлекает action items и распределяет по проектам.</div>
+        <div class="feat-list">
+          <div class="feat-item"><div class="feat-ico">⚡</div><div><div class="feat-name">Auto task extraction</div><div class="feat-sub">Из записей встреч — готовые задачи</div></div></div>
+          <div class="feat-item"><div class="feat-ico">📂</div><div><div class="feat-name">Project workspaces</div><div class="feat-sub">Личные, командные и общие пространства</div></div></div>
+          <div class="feat-item"><div class="feat-ico">🎯</div><div><div class="feat-name">Smart prioritization</div><div class="feat-sub">AI-рекомендации на основе контекста</div></div></div>
+        </div>
+      </div>
+      <div class="prod-visual">
+        <div class="bigph-wrap on" style="transition-delay:0s">
+          <div class="ipm">
+            <div class="ipm-btn ipm-btn-silent"></div>
+            <div class="ipm-btn ipm-btn-vup"></div>
+            <div class="ipm-btn ipm-btn-vdn"></div>
+            <div class="ipm-btn ipm-btn-power"></div>
+            <div class="ipm-frame">
+              <div class="ipm-screen">
+                <div class="ipm-island"></div>
+                <img src="screens/tasks-list.png" style="width:100%;display:block">
+                <div class="ipm-home"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECORDER -->
+    <div class="prod-panel" id="pp-recorder">
+      <div class="prod-content">
+        <div class="prod-title">meeting<br><em>intelligence</em><br><strong>в реальном времени</strong></div>
+        <div class="prod-desc">Запись, транскрибация и AI-анализ встреч. Mind map, insights и готовые задачи — сразу после встречи.</div>
+        <div class="feat-list">
+          <div class="feat-item"><div class="feat-ico">🎙</div><div><div class="feat-name">Real-time транскрипция</div><div class="feat-sub">Точное распознавание с diarization</div></div></div>
+          <div class="feat-item"><div class="feat-ico">🧠</div><div><div class="feat-name">AI Summary & Insights</div><div class="feat-sub">Резюме, ключевые решения, action items</div></div></div>
+          <div class="feat-item"><div class="feat-ico">🗺</div><div><div class="feat-name">Mind Map генерация</div><div class="feat-sub">Визуализация идей и связей встречи</div></div></div>
+        </div>
+      </div>
+      <div class="prod-visual">
+        <div class="bigph-wrap on" style="transition-delay:0s">
+          <div class="ipm">
+            <div class="ipm-btn ipm-btn-silent"></div>
+            <div class="ipm-btn ipm-btn-vup"></div>
+            <div class="ipm-btn ipm-btn-vdn"></div>
+            <div class="ipm-btn ipm-btn-power"></div>
+            <div class="ipm-frame">
+              <div class="ipm-screen">
+                <div class="ipm-island"></div>
+                <img src="screens/recorder.png" style="width:100%;display:block">
+                <div class="ipm-home"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ENTITIES ──────────────────────────────────────── -->
+<section class="sec" id="tech">
+  <div class="sec-inner">
+    <div class="sec-label reveal">ключевой дифференциатор</div>
+    <h2 class="sec-title reveal d1">
+      entity linking —<br>
+      <em>граф знаний</em><br>
+      <strong>в основе продукта</strong>
+    </h2>
+    <p class="reveal d2" style="font-size:17px;color:var(--ink-2);margin-top:24px;max-width:480px;line-height:1.65">
+      Не хранилище. Операционная система мышления, где каждая заметка, задача, проект и встреча соединены в единую семантическую сеть.
+    </p>
+
+    <div class="entity-row">
+      <div class="ent-card">
+        <div class="ent-ico">📝</div>
+        <div class="ent-title">Note</div>
+        <div class="ent-desc">Структурированные заметки с AI-тегами и автосвязями</div>
+        <div class="ent-link" style="color:var(--ink-3);font-size:11px;margin-top:16px">↔ Task</div>
+      </div>
+      <div class="ent-card">
+        <div class="ent-ico">⚙️</div>
+        <div class="ent-title">Task</div>
+        <div class="ent-desc">Задачи с контекстом встречи, из которой они появились</div>
+        <div class="ent-link" style="color:var(--ink-3);font-size:11px;margin-top:16px">↔ Project</div>
+      </div>
+      <div class="ent-card">
+        <div class="ent-ico">📁</div>
+        <div class="ent-title">Project</div>
+        <div class="ent-desc">Проекты как хаб для связанных заметок, задач и встреч</div>
+        <div class="ent-link" style="color:var(--ink-3);font-size:11px;margin-top:16px">↔ Meeting</div>
+      </div>
+      <div class="ent-card">
+        <div class="ent-ico">🎙</div>
+        <div class="ent-title">Meeting</div>
+        <div class="ent-desc">Встречи, которые автоматически порождают задачи и заметки</div>
+        <div class="ent-link" style="color:var(--ink-3);font-size:11px;margin-top:16px">↔ Note</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── AI СТРАТЕГ ─────────────────────────────────────── -->
+<section class="sec ais-sec" id="ai-strateg">
+  <div class="ais-inner">
+
+    <div class="ais-text reveal">
+      <div class="ais-label">ai стратег · новый модуль</div>
+      <h2 class="ais-title">
+        корпоративный<br>
+        <em>интеллект</em><br>
+        <strong>внутри банка.</strong>
+      </h2>
+      <p class="ais-desc">
+        AI-ассистент, обученный на внутренних документах, стандартах и исследованиях банка. Не общий ChatGPT — а стратег, знающий контекст вашей организации.
+      </p>
+      <div class="ais-feats">
+        <div class="ais-feat">
+          <div class="ais-feat-ico">📄</div>
+          <div class="ais-feat-text">
+            <div class="ais-feat-name">AI-анализ документов</div>
+            <div class="ais-feat-sub">Встречи Правления, Стратегические сессии и Оперативные совещания — мгновенный анализ и выводы</div>
+          </div>
+        </div>
+        <div class="ais-feat">
+          <div class="ais-feat-ico">🔍</div>
+          <div class="ais-feat-text">
+            <div class="ais-feat-name">Поиск по исследованиям и кейсам</div>
+            <div class="ais-feat-sub">25 000+ бизнес-исследований и кейсов — семантический поиск с ответом в контексте</div>
+          </div>
+        </div>
+        <div class="ais-feat">
+          <div class="ais-feat-ico">📋</div>
+          <div class="ais-feat-text">
+            <div class="ais-feat-name">Q&amp;A по стандартам и численности</div>
+            <div class="ais-feat-sub">Вопросы по целеполаганию, стратегии, структуре и HR-аналитике — ответы на основе корп. базы знаний</div>
+            <div class="ais-feat-badge">скоро</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ais-mock reveal d2">
+      <div class="ais-browser">
+        <div class="ais-chrome">
+          <div class="ais-dots">
+            <div class="ais-dot"></div>
+            <div class="ais-dot"></div>
+            <div class="ais-dot"></div>
+          </div>
+          <div class="ais-urlbar">potok.sber.internal / ai-strateg</div>
+        </div>
+        <div class="ais-screen">
+          <img src="screens/ai-strateg.png" alt="AI Стратег" style="width:100%;display:block;">
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── STATS ─────────────────────────────────────────── -->
+<div class="stats-sec">
+  <div class="stats-inner">
+    <div class="stat-cell">
+      <div class="stat-num" data-target="3"><span class="sn">0</span></div>
+      <div class="stat-lbl">модуля в<br>одном workspace</div>
+    </div>
+    <div class="stat-cell" style="padding-left:40px">
+      <div class="stat-num" data-target="5"><span class="sn">0</span><span class="stat-unit">×</span></div>
+      <div class="stat-lbl">быстрее поиска<br>по контексту</div>
+    </div>
+    <div class="stat-cell" style="padding-left:40px">
+      <div class="stat-num" data-target="100"><span class="sn">0</span><span class="stat-unit">%</span></div>
+      <div class="stat-lbl">ai-native<br>от первого дня</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num"><span class="sn">0</span><span style="font-size:32px;font-weight:300">$</span></div>
+      <div class="stat-lbl">context switching<br>cost</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROADMAP ───────────────────────────────────────── -->
+<section class="sec" id="roadmap">
+  <div class="sec-inner">
+    <div class="sec-label reveal">стратегический roadmap</div>
+    <h2 class="sec-title reveal d1">
+      от capture<br>к <em>agentic</em><br><strong>intelligence</strong>
+    </h2>
+
+    <div class="rm-items">
+      <div class="rm-item">
+        <div class="rm-left">
+          <div class="rm-phase">Phase 1 · сейчас</div>
+          <div class="rm-period">2026</div>
+        </div>
+        <div class="rm-right">
+          <div class="rm-title">Core UX & AI Summarization</div>
+          <div class="rm-desc">Усиление базового пользовательского опыта во всех трёх модулях. Запуск AI-транскрибации и автоматического резюмирования встреч. Стабилизация entity-linking.</div>
+          <div class="rm-tags">
+            <span class="rm-tag">Notes 2.0</span>
+            <span class="rm-tag">AI Summary</span>
+            <span class="rm-tag">Entity Graph v1</span>
+            <span class="rm-tag">Mobile UX</span>
+          </div>
+        </div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-left">
+          <div class="rm-phase">Phase 2</div>
+          <div class="rm-period">Q3 2026</div>
+        </div>
+        <div class="rm-right">
+          <div class="rm-title">AI Recommendations & Semantic Search</div>
+          <div class="rm-desc">Запуск семантического поиска по всему workspace. AI-рекомендации next actions на основе контекста. Автоматическое извлечение задач из записей встреч.</div>
+          <div class="rm-tags">
+            <span class="rm-tag">Semantic Search</span>
+            <span class="rm-tag">Auto Task Extraction</span>
+            <span class="rm-tag">AI Recommendations</span>
+          </div>
+        </div>
+      </div>
+      <div class="rm-item">
+        <div class="rm-left">
+          <div class="rm-phase">Phase 3</div>
+          <div class="rm-period">Q1 2027</div>
+        </div>
+        <div class="rm-right">
+          <div class="rm-title">Agentic Workflows & Orchestration</div>
+          <div class="rm-desc">Автономные AI-агенты для рутинных задач. Интеграции с внешними системами. Поток X становится по-настоящему operating system для knowledge workers.</div>
+          <div class="rm-tags">
+            <span class="rm-tag">AI Agents</span>
+            <span class="rm-tag">Integrations</span>
+            <span class="rm-tag">Enterprise API</span>
+            <span class="rm-tag">Orchestration</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── RUN ────────────────────────────────────────────── -->
+<section class="sec run-sec" id="run">
+  <div class="sec-inner">
+    <div class="sec-label reveal">применение &amp; развитие</div>
+    <h2 class="sec-title reveal d1">
+      где работает<br>
+      <em>поток x</em> <strong>в банке.</strong>
+    </h2>
+
+    <div class="run-grid">
+      <div class="run-card">
+        <div class="run-card-tag">сферы применения</div>
+        <div class="run-card-title">команды,<br>которым важен контекст</div>
+        <div class="run-card-desc">Поток X встраивается в рабочий процесс любой команды, где критично сохранять и передавать знания.</div>
+        <hr class="run-divider">
+        <ul class="run-list">
+          <li class="run-item">Продуктовые команды — фиксация решений и гипотез</li>
+          <li class="run-item">Блок стратегии — аналитика встреч и мозговых штурмов</li>
+          <li class="run-item">HR &amp; L&amp;D — база знаний для онбординга и обучения</li>
+          <li class="run-item">Топ-менеджмент — быстрый доступ к контексту решений</li>
+          <li class="run-item">Проектные офисы — трекинг задач и протоколов</li>
+        </ul>
+      </div>
+
+      <div class="run-card featured">
+        <div class="run-card-tag" style="color:rgba(238,242,250,.4)">ценность для бизнеса</div>
+        <div class="run-card-title" style="color:var(--white)">измеримый эффект<br>для организации</div>
+        <div class="run-card-desc" style="color:rgba(238,242,250,.55)">Корпоративный AI-инструмент, который напрямую влияет на эффективность и качество решений.</div>
+        <hr class="run-divider" style="border-color:rgba(255,255,255,.1)">
+        <ul class="run-list">
+          <li class="run-item" style="color:rgba(238,242,250,.65)">Сокращение потерь контекста при смене команд</li>
+          <li class="run-item" style="color:rgba(238,242,250,.65)">Единая база знаний — меньше дублирования</li>
+          <li class="run-item" style="color:rgba(238,242,250,.65)">Автоматизация протоколов встреч и саммари</li>
+          <li class="run-item" style="color:rgba(238,242,250,.65)">AI-поддержка при принятии решений</li>
+          <li class="run-item" style="color:rgba(238,242,250,.65)">Compliance-ready: данные остаются внутри банка</li>
+        </ul>
+      </div>
+
+      <div class="run-card">
+        <div class="run-card-tag">идеи развития</div>
+        <div class="run-card-title">куда движется<br>продукт дальше</div>
+        <div class="run-card-desc">Roadmap строится вокруг глубокой интеграции в корпоративную экосистему банка.</div>
+        <hr class="run-divider">
+        <ul class="run-list">
+          <li class="run-item">Интеграция с корп. системами (Jira, Confluence, почта)</li>
+          <li class="run-item">Персональный AI-ассистент на базе истории команды</li>
+          <li class="run-item">Аналитика командной эффективности</li>
+          <li class="run-item">Корпоративный knowledge graph</li>
+          <li class="run-item">Agentic workflows для рутинных процессов</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ───────────────────────────────────────────── -->
+<section class="cta-sec sec">
+  <div class="cta-inner">
+    <div class="reveal">
+      <div class="sec-label">north star vision</div>
+      <h2 class="cta-title">
+        поток <em>x</em> —<br>
+        это не ещё<br>
+        <strong>одно приложение</strong>
+      </h2>
+    </div>
+    <div class="cta-right reveal d2">
+      <blockquote class="cta-quote">
+        «Информация не хранится — она понимается, связывается и превращается в действие»
+      </blockquote>
+      <div class="cta-actions">
+        <button class="btn-fill" style="font-size:15px;padding:15px 36px">начать бесплатно →</button>
+        <button class="btn-outline" style="font-size:15px;padding:14px 32px">узнать больше</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft-logo">поток <em style="font-style:italic">x</em></div>
+  <div class="ft-links">
+    <a href="#">продукт</a>
+    <a href="#">roadmap</a>
+    <a href="#run">run</a>
+    <a href="#">privacy</a>
+  </div>
+  <div class="ft-copy">© 2026 Поток X</div>
+</footer>
+
+<script>
+// ── CURSOR ──────────────────────────────────────────
+const cur = document.getElementById('cur');
+const dot = cur.querySelector('.c-dot');
+const ring = cur.querySelector('.c-ring');
+let mx = 0, my = 0, rx = 0, ry = 0;
+
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  dot.style.left = mx + 'px';
+  dot.style.top  = my + 'px';
+});
+
+(function raf() {
+  rx += (mx - rx) * .11;
+  ry += (my - ry) * .11;
+  ring.style.left = rx + 'px';
+  ring.style.top  = ry + 'px';
+  requestAnimationFrame(raf);
+})();
+
+document.querySelectorAll('a, button, .feat-item, .prob-item, .ts-chip, .run-card, .ent-card, .rm-item, .note-row, .task-row').forEach(el => {
+  el.addEventListener('mouseenter', () => document.body.classList.add('ch'));
+  el.addEventListener('mouseleave', () => document.body.classList.remove('ch'));
+});
+
+// ── NAV ─────────────────────────────────────────────
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 40), { passive: true });
+
+// ── TABS ────────────────────────────────────────────
+document.querySelectorAll('.prod-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.prod-tab').forEach(t => t.classList.remove('on'));
+    document.querySelectorAll('.prod-panel').forEach(p => p.classList.remove('on'));
+    tab.classList.add('on');
+    const panel = document.getElementById('pp-' + tab.dataset.tab);
+    if (panel) {
+      panel.classList.add('on');
+      // trigger big phone reveal
+      const bpw = panel.querySelector('.bigph-wrap');
+      if (bpw) { bpw.classList.remove('on'); setTimeout(() => bpw.classList.add('on'), 30); }
+    }
+  });
+});
+
+// ── INTERSECTION OBSERVER ───────────────────────────
+function observe(selector, cls = 'on', opts = {}) {
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add(cls); });
+  }, { threshold: .12, ...opts });
+  document.querySelectorAll(selector).forEach(el => io.observe(el));
+}
+
+observe('.reveal');
+observe('.prob-item');
+observe('.prob-visual');
+observe('.bigph-wrap');
+observe('.ent-card');
+observe('.rm-item');
+observe('.run-card');
+
+// stagger entity cards
+const entIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.ent-card').forEach((c, i) =>
+        setTimeout(() => c.classList.add('on'), i * 100));
+      entIO.disconnect();
+    }
+  });
+}, { threshold: .1 });
+const er = document.querySelector('.entity-row');
+if (er) entIO.observe(er);
+
+// stagger problem items
+const probIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.prob-item').forEach((c, i) =>
+        setTimeout(() => c.classList.add('on'), i * 120));
+      probIO.disconnect();
+    }
+  });
+}, { threshold: .1 });
+const pi = document.querySelector('.prob-items');
+if (pi) probIO.observe(pi);
+
+// stagger rm items
+const rmIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.rm-item').forEach((c, i) =>
+        setTimeout(() => c.classList.add('on'), i * 150));
+      rmIO.disconnect();
+    }
+  });
+}, { threshold: .05 });
+const rmt = document.querySelector('.rm-items');
+if (rmt) rmIO.observe(rmt);
+
+// stagger run cards
+const runIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.run-card').forEach((c, i) =>
+        setTimeout(() => c.classList.add('on'), i * 120));
+      runIO.disconnect();
+    }
+  });
+}, { threshold: .1 });
+const pg = document.querySelector('.run-grid');
+if (pg) runIO.observe(pg);
+
+// phone clip reveal in hero
+const phIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('.ph-reveal').forEach(p => p.classList.add('on'));
+      phIO.disconnect();
+    }
+  });
+}, { threshold: .1 });
+const phg = document.querySelector('.phones-group');
+if (phg) phIO.observe(phg);
+
+// notes bigph on load
+const bpwNotes = document.getElementById('bpw-notes');
+setTimeout(() => { if (bpwNotes) bpwNotes.classList.add('on'); }, 800);
+
+// ── COUNTERS ─────────────────────────────────────────
+const cntIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      document.querySelectorAll('[data-target]').forEach(el => {
+        const target = +el.dataset.target;
+        const span = el.querySelector('.sn');
+        if (!span) return;
+        const start = performance.now();
+        const dur = 1600;
+        (function tick(now) {
+          const p = Math.min((now - start) / dur, 1);
+          const ease = 1 - Math.pow(1 - p, 3);
+          span.textContent = Math.round(ease * target);
+          if (p < 1) requestAnimationFrame(tick);
+        })(performance.now());
+      });
+      cntIO.disconnect();
+    }
+  });
+}, { threshold: .5 });
+const si = document.querySelector('.stats-inner');
+if (si) cntIO.observe(si);
+
+// ── MOUSE PARALLAX HERO ──────────────────────────────
+const phonesGroup = document.getElementById('phones');
+document.addEventListener('mousemove', e => {
+  if (!phonesGroup) return;
+  const dx = (e.clientX / innerWidth  - .5) * 8;
+  const dy = (e.clientY / innerHeight - .5) * 4;
+  phonesGroup.style.transform = `rotateY(${dx}deg) rotateX(${-dy}deg)`;
+});
+
+// ── MAGNETIC BUTTONS ─────────────────────────────────
+document.querySelectorAll('.btn-fill, .btn-outline, .nav-cta').forEach(btn => {
+  btn.addEventListener('mousemove', e => {
+    const r = btn.getBoundingClientRect();
+    const x = (e.clientX - r.left - r.width  / 2) * .3;
+    const y = (e.clientY - r.top  - r.height / 2) * .3;
+    btn.style.transform = `translate(${x}px,${y}px)`;
+  });
+  btn.addEventListener('mouseleave', () => btn.style.transform = '');
+});
+</script>
+</body>
+</html>
